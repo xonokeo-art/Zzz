@@ -2048,6 +2048,15 @@ function YinYang:CreateWindow(title_text, startTheme)
 
     local globalConnections = {}
     local function track(conn)
+        --// [FIX PERF] antes esta tabla solo crecía: cada reconexión (p.ej. SetTextEffect)
+        --// dejaba la conexión vieja ya desconectada como referencia muerta para siempre.
+        --// Ahora se podan las conexiones ya desconectadas antes de agregar la nueva.
+        for i = #globalConnections, 1, -1 do
+            local existing = globalConnections[i]
+            if not existing.Connected then
+                table.remove(globalConnections, i)
+            end
+        end
         table.insert(globalConnections, conn)
         return conn
     end
@@ -2626,32 +2635,37 @@ function YinYang:CreateWindow(title_text, startTheme)
     local windowTweenBusy = false
     local activeWindowTween = nil
 
+    --// [FIX PERF] Main cuelga directo de ScreenGui, así que buildAnimatedBorder SIEMPRE
+    --// toma la rama forceStrokeOnly/parentIsScreenGui y anima el UIStroke existente
+    --// (buildGlowOnStroke) — nunca crea capas hermanas con atributo GlowOwner.
+    --// Por eso el escaneo de "hasGlow" de abajo nunca encontraba nada y cada apertura
+    --// de la ventana reconstruía el gradiente y los 2 tweens desde cero (gasto real
+    --// en cada abrir/cerrar). Este helper solo pausa (Cancel) los tweens ya existentes
+    --// leyendo ActiveGlowTweens directamente, sin pasar por stopGlowTweens (esa función
+    --// es compartida con otros frames — como FloatingWindow — y no se toca acá).
+    local function pauseMainGlowOnly(key)
+        local tweens = ActiveGlowTweens[key]
+        if tweens then
+            for _, tw in ipairs(tweens) do
+                pcall(function() tw:Cancel() end)
+            end
+        end
+    end
+
     local function setMainGlowEnabled(enabled)
         local key = tostring(Main)
         if enabled then
-            local hasGlow = false
-            if Main.Parent then
-                local tag = "GLOW_" .. key
-                for _, child in ipairs(Main.Parent:GetChildren()) do
-                    if child:GetAttribute("GlowOwner") == tag then
-                        hasGlow = true
-                        child.Visible = true
-                    end
-                end
-            end
-
-            if hasGlow then
-                local tweens = ActiveGlowTweens[key]
-                if tweens then
-                    for _, tw in ipairs(tweens) do
-                        pcall(function() tw:Play() end)
-                    end
+            local tweens = ActiveGlowTweens[key]
+            if tweens then
+                --// Ya existe (se construyó antes, o SetTheme lo reconstruyó): solo reanudar.
+                for _, tw in ipairs(tweens) do
+                    pcall(function() tw:Play() end)
                 end
             else
                 buildAnimatedBorder(Main, Theme.Accent, UDim.new(0, 10))
             end
         else
-            stopGlowTweens(key)
+            pauseMainGlowOnly(key)
             setGlowLayersVisible(Main, false)
         end
     end
