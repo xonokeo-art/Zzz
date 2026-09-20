@@ -5940,6 +5940,159 @@ function YinYang:CreateWindow(title_text, startTheme)
             }
         end
 
+        --// ════════════════════════════════════════════════════════════════════
+        --// DROPDOWN — misma tarjeta visual que CreateToggle, pero con una
+        --// flechita en vez de switch. Al tocarla abre una mini ventana lateral
+        --// (scrolleable, tope de 160px) con las opciones, vía la función
+        --// attachDropdownBehavior que ya existía en la librería pero no estaba
+        --// enganchada a ningún método público de Tab.
+        --// Uso: Tab:CreateDropdown("Categoría", "Category", {"Op1","Op2"}, "Op1", function(val) end)
+        --// ════════════════════════════════════════════════════════════════════
+        function Tab:CreateDropdown(textSpanish, textEnglish, options, default, callback)
+            options = options or {}
+            local displayText = GetText(textSpanish, textEnglish)
+            local selected = default
+
+            local function selectedDisplay()
+                return selected or GetText("Elegí una opción", "Pick an option")
+            end
+
+            --// ── CONTENEDOR PRINCIPAL (misma tarjeta que CreateToggle) ───────────────
+            local Holder = mk("Frame", {
+                Parent = TabPage,
+                Size = UDim2.new(1, 0, 0, 64),
+                BackgroundColor3 = Theme.Secondary,
+                BackgroundTransparency = 0.78,
+                ZIndex = 9
+            })
+            Holder:SetAttribute("ThemeRole", "Secondary")
+            corner(Holder, 10)
+            stroke(Holder, Theme.Stroke, 1, 0.55)
+
+            local AccentBar = mk("Frame", {
+                Parent = Holder,
+                Size = UDim2.new(0, 3, 0, 36),
+                Position = UDim2.new(0, 10, 0.5, -18),
+                BackgroundColor3 = Theme.AccentOff,
+                ZIndex = 10
+            })
+            AccentBar:SetAttribute("ThemeRole", "AccentOff")
+            corner(AccentBar, 999)
+
+            local LabelTxt = mk("TextLabel", {
+                Parent = Holder,
+                Size = UDim2.new(1, -140, 0, 22),
+                Position = UDim2.new(0, 22, 0, 13),
+                BackgroundTransparency = 1,
+                Text = displayText,
+                TextColor3 = Theme.Text,
+                Font = Enum.Font.GothamBlack,
+                TextSize = 15,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 10
+            })
+            LabelTxt:SetAttribute("ThemeTextRole", "Text")
+            LabelTxt:SetAttribute("TextSpanish", textSpanish)
+            LabelTxt:SetAttribute("TextEnglish", textEnglish)
+
+            local StateLabel = mk("TextLabel", {
+                Parent = Holder,
+                Size = UDim2.new(1, -140, 0, 16),
+                Position = UDim2.new(0, 22, 0, 36),
+                BackgroundTransparency = 1,
+                Text = selectedDisplay(),
+                TextColor3 = Theme.TextDim,
+                Font = Enum.Font.Gotham,
+                TextSize = 11,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                ZIndex = 10
+            })
+            StateLabel:SetAttribute("ThemeTextRole", "TextDim")
+
+            --// ── FLECHITA (reemplaza al Switch del Toggle) ───────────────────────────
+            local ChevronBtn = mk("TextButton", {
+                Parent = Holder,
+                Size = UDim2.new(0, 40, 0, 40),
+                Position = UDim2.new(1, -52, 0.5, -20),
+                BackgroundColor3 = Theme.AccentOff,
+                Text = "v",
+                TextColor3 = Theme.Text,
+                Font = Enum.Font.GothamBlack,
+                TextSize = 16,
+                ZIndex = 10
+            })
+            ChevronBtn:SetAttribute("ThemeRole", "AccentOff")
+            corner(ChevronBtn, 999)
+
+            resetScrollTop(TabPage)
+
+            --// ── CONTENIDO DEL POPUP: una fila por opción ─────────────────────────────
+            local function buildPopupContents(Popup, closePopup)
+                for _, optionValue in ipairs(options) do
+                    local Row = mk("TextButton", {
+                        Parent = Popup,
+                        Size = UDim2.new(1, 0, 0, 32),
+                        BackgroundColor3 = Theme.Secondary,
+                        BackgroundTransparency = (optionValue == selected) and 0.4 or 0.78,
+                        Text = "",
+                        ZIndex = 203
+                    })
+                    Row:SetAttribute("ThemeRole", "Secondary")
+                    corner(Row, 6)
+
+                    local RowLabel = mk("TextLabel", {
+                        Parent = Row,
+                        Size = UDim2.new(1, -16, 1, 0),
+                        Position = UDim2.new(0, 10, 0, 0),
+                        BackgroundTransparency = 1,
+                        Text = optionValue,
+                        TextColor3 = Theme.Text,
+                        Font = Enum.Font.Gotham,
+                        TextSize = 12,
+                        TextXAlignment = Enum.TextXAlignment.Left,
+                        TextTruncate = Enum.TextTruncate.AtEnd,
+                        ZIndex = 204
+                    })
+                    RowLabel:SetAttribute("ThemeTextRole", "Text")
+
+                    Row.MouseButton1Click:Connect(function()
+                        selected = optionValue
+                        StateLabel.Text = selectedDisplay()
+                        playSound(Sounds.Click, 0.5)
+                        closePopup()
+                        pcall(callback, selected)
+                    end)
+                end
+            end
+
+            attachDropdownBehavior(Holder, ChevronBtn, ChevronBtn, #options, buildPopupContents)
+
+            if Window._RegisterGlobalOption then
+                Window._RegisterGlobalOption(self, {
+                    Id = nameSpanish .. "::" .. textSpanish,
+                    NameSpanish = textSpanish,
+                    NameEnglish = textEnglish,
+                    Holder = Holder,
+                    Kind = "Dropdown",
+                })
+            end
+
+            --// ── CONTROLADOR PÚBLICO ───────────────────────────────────────────────
+            return {
+                SetValue = function(value)
+                    selected = value
+                    StateLabel.Text = selectedDisplay()
+                end,
+                GetValue = function()
+                    return selected
+                end,
+                Holder = Holder,
+                Click = ChevronBtn
+            }
+        end
+
         --//  FLOATING TOGGLE SIMPLE (CÁPSULA ELEGANTE)
         function Tab:CreateFloatingToggleSimple(text, default, callback)
             local state = default or false
@@ -18796,7 +18949,7 @@ end
 --// Tab:CreateServerInfoCard()
 --// Tab:CreateButton("Mi Botón", function() print("Click!") end)
 --// Tab:CreateToggle("Toggle", false, function(state) print(state) end)
---// Tab:CreateDropdown("Category", {"Op1", "Op2"}, "Op1", function(val) print(val) end)
+--// Tab:CreateDropdown("Categoría", "Category", {"Op1", "Op2"}, "Op1", function(val) print(val) end)
 --// Tab:CreateMultiDropdown("Blacklist", {"A", "B", "C"}, {}, function(tbl) print(table.concat(tbl, ",")) end)
 --//
 --// ============================================================
