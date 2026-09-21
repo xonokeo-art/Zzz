@@ -13797,16 +13797,19 @@ end
     --// ImageLabel, TextLabel, UICorner, UIStroke...) que se quedaban para siempre en
     --// ChatContainer. Con el tiempo (días de chat activo) eso acumula miles de instancias
     --// sin destruir, lo que dispara el consumo de GPU hasta tumbar la UI.
-    local RenderedChatFrames = {}
+    --// Colgado en Window.* (no como 'local'/'local function') porque este scope ya está
+    --// al límite de 200 locales de Lua — ver nota de línea 14368. Agregar 2 locals nuevos
+    --// acá era lo que rompía la carga del script sin error visible en consola.
+    Window.RenderedChatFrames = {}
 
-    local function TrackChatFrame(frame)
-    	while #RenderedChatFrames >= MAX_MESSAGES do
-    		local oldest = table.remove(RenderedChatFrames, 1)
+    Window.TrackChatFrame = function(frame)
+    	while #Window.RenderedChatFrames >= MAX_MESSAGES do
+    		local oldest = table.remove(Window.RenderedChatFrames, 1)
     		if oldest and oldest.Parent then
     			oldest:Destroy()
     		end
     	end
-    	table.insert(RenderedChatFrames, frame)
+    	table.insert(Window.RenderedChatFrames, frame)
     end
 
     local function AddChatMessage(playerName, playerUserId, message, timestamp)
@@ -14983,7 +14986,7 @@ end
     	corner(InviteAvatar, 999)
     	stroke(InviteAvatar, Theme.Stroke, 1.5, 0.35)
 
-    	TrackChatFrame(MessageFrame)
+    	Window.TrackChatFrame(MessageFrame)
 
     	local ContentFrame = mk("Frame", {
     		Parent = MessageFrame,
@@ -15231,7 +15234,7 @@ end
     			ZIndex = 13,
     		})
 
-    		TrackChatFrame(StickerFrame)
+    		Window.TrackChatFrame(StickerFrame)
 
     		-- MANTENER PRESIONADO (0.6s) PARA RESPONDER — estilo WhatsApp
     		-- StickerFrame.Active NO se pone en true → el toque pasa al ScrollingFrame
@@ -15316,7 +15319,7 @@ end
     	    ZIndex = 12,
     	})
 
-    	TrackChatFrame(MessageFrame)
+    	Window.TrackChatFrame(MessageFrame)
 
     	-- AVATAR: más grande para mejor visibilidad
     	local AvatarLabel = mk("ImageLabel", {
